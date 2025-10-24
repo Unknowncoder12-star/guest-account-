@@ -25,7 +25,7 @@ app = Flask(__name__)
 # এই কী গুলো সরাসরি কোডের ভেতরে বসানো হয়েছে
 # =================================================================
 # ব্যবহারকারীর দেওয়া MongoDB URI, ?appName=Cluster0 অংশটি বাদ দেওয়া হয়েছে
-MONGODB_URI = "mongodb+srv://spacemore635_db_user:IDuXJrcd4IKgRkjL@cluster0.dcl2zdn.mongodb.net/"
+MONGODB_URI = "mongodb+srv://freeuser82526:QwjBAilk1631x10k@cluster0.dcl2zdn.mongodb.net/"
 # অ্যাডমিন পাসওয়ার্ড
 ADMIN_KEY = "JOY-100K-ADMIN-MASTER-KEY"
 # =================================================================
