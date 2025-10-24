@@ -20,17 +20,31 @@ except ImportError:
 
 app = Flask(__name__)
 
-# --- ডেটাবেস ও এনভায়রনমেন্ট ভেরিয়েবল সেটআপ ---
+# =================================================================
+# 🔴 WARNING: HARDCODED KEYS (নিরাপত্তা ঝুঁকি)
+# এই কী গুলো সরাসরি কোডের ভেতরে বসানো হয়েছে
+# =================================================================
+# ব্যবহারকারীর দেওয়া MongoDB URI, ?appName=Cluster0 অংশটি বাদ দেওয়া হয়েছে
+MONGODB_URI = "mongodb+srv://spacemore635_db_user:IDuXJrcd4IKgRkjL@cluster0.dcl2zdn.mongodb.net/"
+# অ্যাডমিন পাসওয়ার্ড
+ADMIN_KEY = "JOY-100K-ADMIN-MASTER-KEY"
+# =================================================================
+
+
+# --- ডেটাবেস সংযোগ চেষ্টা ---
+keys_collection = None
 try:
-    MONGODB_URI = os.environ.get('MONGODB_URI')
-    ADMIN_KEY = os.environ.get('ADMIN_KEY')
-    
+    # ডেটাবেস সংযোগ
     client = pymongo.MongoClient(MONGODB_URI)
     db = client.get_database("joy100k_api_db") # ডেটাবেসের নাম
     keys_collection = db.api_keys # "keys" নামে একটি কালেকশন
+    # একটি ডামি অ্যাক্সেস চেক করে দেখা
+    db.command('ping') 
+    print("MongoDB connection successful.")
 except Exception as e:
     print(f"Error connecting to MongoDB: {e}")
-    keys_collection = None
+    # যদি সংযোগ ব্যর্থ হয়, তাহলে keys_collection None থাকবে এবং API এরর দেবে
+    pass
 
 # --- হেলপার ফাংশন ---
 
@@ -75,13 +89,13 @@ def handle_generation_request():
         return jsonify({"error": "This key has expired."}), 403
 
     # --- ৩. লিমিট (Limit) সিস্টেম চেক ---
-    limit = key_data.get("limit", float('inf')) # ইনফিনিট লিমিট যদি সেট না থাকে
+    limit = key_data.get("limit", float('inf')) 
     usage_count = key_data.get("usage_count", 0)
     
     try:
         amount = int(amount_str)
         if amount < 1: amount = 1
-        if amount > 5: amount = 5 # Vercel টাইমআউট এড়াতে একবারে সর্বোচ্চ ৫টি
+        if amount > 5: amount = 5 
     except ValueError:
         amount = 1
 
@@ -101,7 +115,7 @@ def handle_generation_request():
     
     for i in range(amount):
         try:
-            r = create_acc(region) # আপনার মূল ফাংশন কল
+            r = create_acc(region) 
             if r and r.get('data') and r.get('status_code') == 200:
                 successful_accounts.append({
                     "uid": r.get("uid"),
@@ -141,9 +155,9 @@ def create_key():
         return jsonify({"error": "Access Denied. Invalid admin key."}), 401
     
     data = request.json
-    key_type = data.get('type', 'random') # 'random' or 'custom'
-    limit = data.get('limit') # int, e.g., 100
-    expiry_days = data.get('expiry_days') # int, e.g., 30
+    key_type = data.get('type', 'random') 
+    limit = data.get('limit') 
+    expiry_days = data.get('expiry_days') 
 
     if key_type == 'custom':
         new_key = data.get('custom_key')
@@ -154,13 +168,11 @@ def create_key():
     else:
         new_key = generate_random_key()
 
-    # এক্সপায়ার ডেট সেট
     expiry_date_obj = None
     if expiry_days:
         expiry_date_obj = datetime.utcnow() + timedelta(days=int(expiry_days))
 
-    # লিমিট সেট
-    limit_obj = float('inf') # ডিফল্ট অসীম
+    limit_obj = float('inf') 
     if limit:
         limit_obj = int(limit)
 
@@ -175,7 +187,6 @@ def create_key():
 
     try:
         keys_collection.insert_one(key_doc)
-        # JSON রেসপন্সের জন্য _id ও datetime অবজেক্টকে string-এ রূপান্তর
         key_doc.pop('_id', None)
         key_doc['expiry_date'] = str(key_doc['expiry_date']) if key_doc['expiry_date'] else "Never"
         key_doc['created_at'] = str(key_doc['created_at'])
@@ -222,7 +233,7 @@ def update_key():
     if 'add_days' in data:
         current_expiry = key_data.get("expiry_date", datetime.utcnow())
         updates["expiry_date"] = current_expiry + timedelta(days=int(data['add_days']))
-    if 'is_active' in data: # true বা false
+    if 'is_active' in data: 
         updates["is_active"] = bool(data['is_active'])
 
     if not updates:
