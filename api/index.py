@@ -92,7 +92,7 @@ def handle_generation_request():
     try:
         amount = int(amount_str)
         if amount < 1: amount = 1
-        if amount > 5: amount = 5 
+        if amount > 100: amount = 100 
     except ValueError:
         amount = 1
         
