@@ -1,70 +1,71 @@
 from flask import Flask, request, jsonify
 import sys
 import os
-import pymongo
-from datetime import datetime, timedelta
 import random
 import string
+import json
+from datetime import datetime, timedelta
+import logging # লগিং যোগ করা হলো
 
 # Vercel-কে রুট ফোল্ডার চেনানোর জন্য
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # আপনার মূল স্ক্রিপ্ট থেকে ফাংশন ইম্পোর্ট করা হচ্ছে
 try:
+    # নিশ্চিত করুন আপনার ফাইলটির নাম XGE_core.py বা XGE.py
     from XGE_core import create_acc, REGION_URLS
 except ImportError:
-    print("Error: XGE_core.py import failed.")
+    logging.error("ImportError: XGE_core.py not found or has errors.")
     def create_acc(region):
         return {"data": None, "status_code": 500, "uid": None, "password": None, "name": "IMPORT_ERROR"}
     REGION_URLS = {}
 
 app = Flask(__name__)
 
-# =================================================================
-# 🔴 WARNING: HARDCODED KEYS (নিরাপত্তা ঝুঁকি)
-# এই কী গুলো সরাসরি কোডের ভেতরে বসানো হয়েছে
-# =================================================================
-# ব্যবহারকারীর দেওয়া MongoDB URI, ?appName=Cluster0 অংশটি বাদ দেওয়া হয়েছে
-MONGODB_URI = "mongodb+srv://freeuser82526:QwjBAilk1631x10k@cluster0.dcl2zdn.mongodb.net/"
-# অ্যাডমিন পাসওয়ার্ড
-ADMIN_KEY = "JOY-100K-ADMIN-MASTER-KEY"
-# =================================================================
+# --- Static Key Management Setup ---
 
+# Admin Key (MUST be set in Vercel Environment Variables)
+ADMIN_KEY = os.environ.get('ADMIN_KEY', 'DEFAULT-ADMIN-PASS') 
 
-# --- ডেটাবেস সংযোগ চেষ্টা ---
-keys_collection = None
+# Get API Keys as a JSON string from Vercel Environment Variable
+API_KEYS_JSON_STRING = os.environ.get('API_KEYS_JSON', '[]')
+STATIC_KEYS = {} 
+
 try:
-    # ডেটাবেস সংযোগ
-    client = pymongo.MongoClient(MONGODB_URI)
-    db = client.get_database("joy100k_api_db") # ডেটাবেসের নাম
-    keys_collection = db.api_keys # "keys" নামে একটি কালেকশন
-    # একটি ডামি অ্যাক্সেস চেক করে দেখা
-    db.command('ping') 
-    print("MongoDB connection successful.")
+    # Load keys statically. Usage_count cannot be updated without a database.
+    keys_list = json.loads(API_KEYS_JSON_STRING)
+    for key_data in keys_list:
+        key_str = key_data.get('key')
+        if key_str:
+            STATIC_KEYS[key_str] = {
+                # Limit will be checked, but usage_count will always be 0
+                'limit': key_data.get('limit', float('inf')),
+                'usage_count': 0, 
+                'expiry_date': datetime.strptime(key_data['expiry_date'], '%Y-%m-%d') if key_data.get('expiry_date') else None,
+                'is_active': key_data.get('is_active', True)
+            }
 except Exception as e:
-    print(f"Error connecting to MongoDB: {e}")
-    # যদি সংযোগ ব্যর্থ হয়, তাহলে keys_collection None থাকবে এবং API এরর দেবে
-    pass
+    logging.error(f"Error loading API_KEYS_JSON: {e}. Check if the JSON format is valid.")
+    # If JSON is invalid, STATIC_KEYS will remain empty, blocking all API calls.
 
-# --- হেলপার ফাংশন ---
+
+# --- Helper Functions (Same as before) ---
 
 def is_admin(req):
-    """অ্যাডমিন কী চেক করে"""
     auth_header = req.headers.get('Authorization')
     if not auth_header or auth_header != ADMIN_KEY:
         return False
     return True
 
 def generate_random_key():
-    """র‍্যান্ডম কী তৈরি করে"""
     chars = string.ascii_uppercase + string.digits
     return 'JOY-' + ''.join(random.choice(chars) for _ in range(16))
 
 # --- ১. অ্যাকাউন্ট জেনারেশন রুট (ব্যবহারকারীদের জন্য) ---
 @app.route('/', methods=['GET'])
 def handle_generation_request():
-    if not keys_collection:
-        return jsonify({"error": "Database connection failed. Contact admin."}), 500
+    if not STATIC_KEYS:
+        return jsonify({"error": "No API Keys loaded. Contact admin to set API_KEYS_JSON."}), 503
 
     # --- ব্যবহারকারীর ইনপুট URL থেকে নেওয়া ---
     api_key = request.args.get('key')
@@ -72,12 +73,9 @@ def handle_generation_request():
     amount_str = request.args.get('amount', '1')
 
     # --- ১. কী ভ্যালিডেশন ---
-    if not api_key:
-        return jsonify({"error": "Missing 'key' parameter."}), 401
+    key_data = STATIC_KEYS.get(api_key)
 
-    key_data = keys_collection.find_one({"key": api_key})
-
-    if not key_data:
+    if not api_key or not key_data:
         return jsonify({"error": "Invalid API key."}), 403
 
     if not key_data.get("is_active", True):
@@ -88,9 +86,8 @@ def handle_generation_request():
     if expiry_date and datetime.utcnow() > expiry_date:
         return jsonify({"error": "This key has expired."}), 403
 
-    # --- ৩. লিমিট (Limit) সিস্টেম চেক ---
+    # --- ৩. লিমিট (Limit) সিস্টেম চেক (ব্যবহার ট্র্যাক হবে না) ---
     limit = key_data.get("limit", float('inf')) 
-    usage_count = key_data.get("usage_count", 0)
     
     try:
         amount = int(amount_str)
@@ -98,10 +95,10 @@ def handle_generation_request():
         if amount > 5: amount = 5 
     except ValueError:
         amount = 1
-
-    if (usage_count + amount) > limit:
-        remaining_uses = limit - usage_count
-        return jsonify({"error": f"Key limit exceeded. Remaining uses: {remaining_uses}"}), 403
+        
+    # যেহেতু usage_count সবসময় 0, তাই limit চেক শুধু একটি সতর্কীকরণ হিসেবে কাজ করবে।
+    if 0 + amount > limit: 
+        return jsonify({"error": f"Key limit exceeded. Limit is {limit}. Usage is not tracked without a database."}), 403
 
     # --- ৪. রিজিয়ন ভ্যালিডেশন ---
     if not region:
@@ -127,137 +124,72 @@ def handle_generation_request():
         except Exception as e:
             failed_accounts += 1
     
-    # --- ৬. কী ব্যবহার আপডেট করা ---
-    keys_collection.update_one(
-        {"key": api_key},
-        {"$inc": {"usage_count": len(successful_accounts)}}
-    )
-
-    # --- ৭. ফলাফল পাঠানো ---
+    # --- ৬. ফলাফল পাঠানো ---
     return jsonify({
         "status": "success",
         "region": region,
         "key_info": {
-            "uses_remaining": (limit - (usage_count + len(successful_accounts))) if limit != float('inf') else "unlimited",
-            "expires_on": key_data.get("expiry_date", "never")
+            "limit": limit if limit != float('inf') else "unlimited",
+            "usage_tracked": "No (No Database)",
+            "expires_on": key_data.get("expiry_date", "never").strftime('%Y-%m-%d') if key_data.get('expiry_date') else "never"
         },
         "successful_count": len(successful_accounts),
         "failed_count": failed_accounts,
         "accounts": successful_accounts
     }), 200
 
-# --- ২. অ্যাডমিন রুট (কী ম্যানেজমেন্টের জন্য) ---
+# --- ২. অ্যাডমিন রুট (কী ম্যানেজমেন্টের জন্য - এখন শুধু ইনস্ট্রাকশন দেখাবে) ---
+
+def admin_instruction_response():
+    """Admin routes now return instructions for manual Vercel configuration."""
+    current_keys_json = json.dumps(list(STATIC_KEYS.keys()), indent=2)
+    return jsonify({
+        "WARNING": "Database not in use. Key management is now STATIC.",
+        "ACTION_REQUIRED": "To CREATE, REMOVE, or UPDATE a key, you MUST manually edit the 'API_KEYS_JSON' Environment Variable in your Vercel Dashboard.",
+        "Vercel_Path": "Vercel Project -> Settings -> Environment Variables",
+        "JSON_Format_Example": [
+            {
+                "key": "MY_CUSTOM_KEY",
+                "limit": 50,
+                "expiry_date": "2025-12-31", 
+                "is_active": true
+            },
+            {
+                "key": "ANOTHER_KEY",
+                "limit": 1000,
+                "expiry_date": null, 
+                "is_active": true
+            }
+        ],
+        "Current_Loaded_Keys": current_keys_json
+    }), 200
+
 
 @app.route('/admin/create_key', methods=['POST'])
-def create_key():
-    """নতুন কী তৈরি করা"""
+@app.route('/admin/remove_key', methods=['POST'])
+@app.route('/admin/update_key', methods=['POST'])
+def admin_manual_update():
     if not is_admin(request):
         return jsonify({"error": "Access Denied. Invalid admin key."}), 401
-    
-    data = request.json
-    key_type = data.get('type', 'random') 
-    limit = data.get('limit') 
-    expiry_days = data.get('expiry_days') 
-
-    if key_type == 'custom':
-        new_key = data.get('custom_key')
-        if not new_key:
-            return jsonify({"error": "'custom_key' is required for type 'custom'"}), 400
-        if keys_collection.find_one({"key": new_key}):
-            return jsonify({"error": "This custom key already exists."}), 400
-    else:
-        new_key = generate_random_key()
-
-    expiry_date_obj = None
-    if expiry_days:
-        expiry_date_obj = datetime.utcnow() + timedelta(days=int(expiry_days))
-
-    limit_obj = float('inf') 
-    if limit:
-        limit_obj = int(limit)
-
-    key_doc = {
-        "key": new_key,
-        "limit": limit_obj,
-        "usage_count": 0,
-        "expiry_date": expiry_date_obj,
-        "is_active": True,
-        "created_at": datetime.utcnow()
-    }
-
-    try:
-        keys_collection.insert_one(key_doc)
-        key_doc.pop('_id', None)
-        key_doc['expiry_date'] = str(key_doc['expiry_date']) if key_doc['expiry_date'] else "Never"
-        key_doc['created_at'] = str(key_doc['created_at'])
-        return jsonify({"message": "Key created successfully", "key_details": key_doc}), 201
-    except Exception as e:
-        return jsonify({"error": f"Failed to create key: {e}"}), 500
-
-@app.route('/admin/remove_key', methods=['POST'])
-def remove_key():
-    """কী ডিলিট করা"""
-    if not is_admin(request):
-        return jsonify({"error": "Access Denied."}), 401
-    
-    data = request.json
-    key_to_delete = data.get('key')
-    if not key_to_delete:
-        return jsonify({"error": "'key' is required."}), 400
-
-    result = keys_collection.delete_one({"key": key_to_delete})
-    
-    if result.deleted_count > 0:
-        return jsonify({"message": f"Key '{key_to_delete}' removed successfully."}), 200
-    else:
-        return jsonify({"error": "Key not found."}), 404
-
-@app.route('/admin/update_key', methods=['POST'])
-def update_key():
-    """কী-এর লিমিট, এক্সপায়ার বা স্ট্যাটাস আপডেট করা"""
-    if not is_admin(request):
-        return jsonify({"error": "Access Denied."}), 401
-    
-    data = request.json
-    key_to_update = data.get('key')
-    if not key_to_update:
-        return jsonify({"error": "'key' is required."}), 400
-
-    key_data = keys_collection.find_one({"key": key_to_update})
-    if not key_data:
-        return jsonify({"error": "Key not found."}), 404
-
-    updates = {}
-    if 'new_limit' in data:
-        updates["limit"] = int(data['new_limit'])
-    if 'add_days' in data:
-        current_expiry = key_data.get("expiry_date", datetime.utcnow())
-        updates["expiry_date"] = current_expiry + timedelta(days=int(data['add_days']))
-    if 'is_active' in data: 
-        updates["is_active"] = bool(data['is_active'])
-
-    if not updates:
-        return jsonify({"error": "No update fields provided (e.g., 'new_limit', 'add_days', 'is_active')."}), 400
-    
-    keys_collection.update_one({"key": key_to_update}, {"$set": updates})
-    return jsonify({"message": f"Key '{key_to_update}' updated successfully."}), 200
+    return admin_instruction_response()
 
 @app.route('/admin/show_keys', methods=['GET'])
 def show_all_keys():
-    """সব কী-এর তথ্য দেখানো"""
     if not is_admin(request):
         return jsonify({"error": "Access Denied."}), 401
     
-    all_keys = []
-    for key in keys_collection.find({}):
-        # JSON-এ দেখানোর জন্য ফরম্যাট করা
-        key.pop('_id', None)
-        key['limit'] = "Unlimited" if key['limit'] == float('inf') else key['limit']
-        key['expiry_date'] = str(key.get('expiry_date', 'N/A'))
-        key['created_at'] = str(key.get('created_at', 'N/A'))
-        all_keys.append(key)
+    formatted_keys = []
+    for k, v in STATIC_KEYS.items():
+        formatted_keys.append({
+            "key": k,
+            "limit": v['limit'] if v['limit'] != float('inf') else "Unlimited",
+            "is_active": v['is_active'],
+            "expiry_date": v['expiry_date'].strftime('%Y-%m-%d') if v['expiry_date'] else "Never",
+            "usage_tracked": "No"
+        })
         
-    return jsonify({"total_keys": len(all_keys), "keys": all_keys}), 200
+    return jsonify({"total_keys": len(formatted_keys), "keys": formatted_keys}), 200
+
 
 # Vercel-এ চালানোর জন্য
 if __name__ == "__main__":
