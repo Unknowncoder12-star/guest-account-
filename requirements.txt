@@ -4,5 +4,5 @@ colorama
 pycryptodome
 protobuf-decoder
 urllib3
-pymongo[srv]
+pymongo[srv] 
 dnspython
