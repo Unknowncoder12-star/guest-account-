@@ -8,32 +8,22 @@ from Crypto.Util.Padding import pad
 import json
 from protobuf_decoder.protobuf_decoder import Parser
 import codecs
-import time
 from datetime import datetime
-from colorama import Fore,Style
 import urllib3
-import os
 import sys
+import base64
 
 # Disable only the InsecureRequestWarning
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# --- Color Definitions (from original code) ---
-red = Fore.RED
-lg = Fore.LIGHTGREEN_EX
-green = Fore.GREEN
-bold = Style.BRIGHT
-purpel = Fore.MAGENTA
-reset = Style.RESET_ALL # Added reset for clarity and use in header
-
-# --- Configuration (from original code) ---
+# --- Configuration (Necessary Global Variables) ---
 hex_key = "32656534343831396539623435393838343531343130363762323831363231383734643064356437616639643866376530306331653534373135623764316533"
 key = bytes.fromhex(hex_key)
 
 REGION_LANG = {"ME": "ar","IND": "hi","ID": "id","VN": "vi","TH": "th","BD": "bn","PK": "ur","TW": "zh","EU": "en","CIS": "ru","NA": "en","SAC": "es","BR": "pt"}
 REGION_URLS = {"IND": "https://client.ind.freefiremobile.com/","ID": "https://clientbp.ggblueshark.com/","BR": "https://client.us.freefiremobile.com/","ME": "https://clientbp.common.ggbluefox.com/","VN": "https://clientbp.ggblueshark.com/","TH": "https://clientbp.common.ggbluefox.com/","CIS": "https://clientbp.ggblueshark.com/","BD": "https://clientbp.ggblueshark.com/","PK": "https://clientbp.ggblueshark.com/","SG": "https://clientbp.ggblueshark.com/","NA": "https://client.us.freefiremobile.com/","SAC": "https://client.us.freefiremobile.com/","EU": "https://clientbp.ggblueshark.com/","TW": "https://clientbp.ggblueshark.com/"}
 
-# --- Core Functions (kept as is from original code) ---
+# --- Core Functions (kept clean) ---
 
 def get_region(language_code: str) -> str:
     return REGION_LANG.get(language_code)
@@ -93,7 +83,6 @@ def E_AEs(Pc):
 
 def generate_random_name():
     super_digits = '⁰¹²³⁴⁵⁶⁷⁸⁹'
-    # Changed prefix from 'XR07' to 'JOY'
     name = 'JOY' + ''.join(random.choice(super_digits) for _ in range(6))
     return name
 
@@ -119,17 +108,14 @@ def create_acc(region):
         "Connection": "Keep-Alive"
     }
     
-    # sys.stdout.write(f"\r{lg}>> Initializing Registration...{reset}")
-    # sys.stdout.flush()
-
+    # Removed CLI-specific output (sys.stdout.write)
     response = requests.post(url, headers=headers, data=data)
     try:
         uid = response.json()['uid']
-        # Removed internal prints to keep output clean during batch run
         return token(uid, password,region)
     except Exception as e:
-        # Removed internal prints to keep output clean during batch run
-        return create_acc(region)
+        # Added a check to prevent infinite recursion on failure
+        return {"data": None, "status_code": 500, "uid": None, "password": None, "name": "REGISTRATION_FAILED"}
 
 
 def token(uid , password , region):
@@ -158,13 +144,11 @@ def token(uid , password , region):
         access_token = response.json()["access_token"]
         refresh_token = response.json()['refresh_token']
     except:
-        # Removed internal prints to keep output clean during batch run
         return None
     
     result = encode_string(open_id)
     field = to_unicode_escaped(result['field_14'])
     field = codecs.decode(field, 'unicode_escape').encode('latin1')
-    # Removed internal prints to keep output clean during batch run
     return Major_Regsiter(access_token , open_id , field, uid, password,region)
 
 def encode_string(original):
@@ -228,7 +212,6 @@ def Major_Regsiter(access_token , open_id , field , uid , password,region):
     body = bytes.fromhex(payload)
     
     response = requests.post(url, headers=headers, data=body,verify=False)
-    # Removed internal prints to keep output clean during batch run
     return login(uid , password, access_token , open_id , response.content.hex() , response.status_code , name , region)
 
 def encrypt_api(plain_text):
@@ -255,7 +238,6 @@ def chooseregion(data_bytes, jwt_token):
         'ReleaseVersion': "OB50"
     }
     response = requests.post(url, data=payload, headers=headers,verify=False)
-    # Removed internal prints to keep output clean during batch run
     return response.status_code
 
 
@@ -289,7 +271,6 @@ def login(uid , password, access_token , open_id, response , status_code , name 
 
     URL = "https://loginbp.ggblueshark.com/MajorLogin"
     RESPONSE = requests.post(URL, headers=headers, data=Final_Payload,verify=False) 
-    # Removed internal prints to keep output clean during batch run
     
     if RESPONSE.status_code == 200:
         if len(RESPONSE.text) < 10:
@@ -302,7 +283,6 @@ def login(uid , password, access_token , open_id, response , status_code , name 
             
             # Simplified JWT parsing to avoid unnecessary index errors
             try:
-                # Find the start of the JWT signature (usually 44 chars of the signature)
                 start_index = BASE64_TOKEN.find(".")
                 if start_index != -1:
                     second_dot_index = BASE64_TOKEN.find(".", start_index + 1)
@@ -323,16 +303,13 @@ def login(uid , password, access_token , open_id, response , status_code , name 
             r = chooseregion(fields, BASE64_TOKEN)
 
             if r == 200:
-                # Removed internal prints to keep output clean during batch run
                 return login_server(uid , password, access_token , open_id, response , status_code , name , region)
             
         else:
-            # For AR/EN, find the token directly in the response text
             BASE64_TOKEN = RESPONSE.text[RESPONSE.text.find("eyJhbGciOiJIUzI1NiIsInN2ciI6IjEiLCJ0eXAiOiJKV1QifQ"):-1]
         
         # Final JWT trimming logic
         second_dot_index = BASE64_TOKEN.find(".", BASE64_TOKEN.find(".") + 1)     
-        # Removed time.sleep(0.2)
         BASE64_TOKEN = BASE64_TOKEN[:second_dot_index+44]
         dat = GET_PAYLOAD_BY_DATA(BASE64_TOKEN,access_token,1,response , status_code , name , uid , password,region)
         return dat
@@ -373,7 +350,6 @@ def login_server(uid , password, access_token , open_id, response , status_code 
         URL = "https://loginbp.ggblueshark.com/MajorLogin"
         
     RESPONSE = requests.post(URL, headers=headers, data=Final_Payload,verify=False) 
-    # Removed internal prints to keep output clean during batch run
     
     if RESPONSE.status_code == 200:
         if len(RESPONSE.text) < 10:
@@ -385,16 +361,13 @@ def login_server(uid , password, access_token , open_id, response , status_code 
 
         # Final JWT trimming logic
         second_dot_index = BASE64_TOKEN.find(".", BASE64_TOKEN.find(".") + 1)     
-        # Removed time.sleep(0.2)
         BASE64_TOKEN = BASE64_TOKEN[:second_dot_index+44]
-        # Removed internal prints to keep output clean during batch run
         dat = GET_PAYLOAD_BY_DATA(BASE64_TOKEN,access_token,1,response , status_code , name , uid , password, region)
         return dat
     
     return {"data":None ,"response" : response , "status_code" : RESPONSE.status_code ,"name" : name, "uid" : uid, "password" : password}
 
 
-import base64
 def GET_PAYLOAD_BY_DATA(JWT_TOKEN, NEW_ACCESS_TOKEN, date,response , status_code , name, uid, password, region):
         try:
             token_payload_base64 = JWT_TOKEN.split('.')[1]
@@ -420,12 +393,10 @@ def GET_PAYLOAD_BY_DATA(JWT_TOKEN, NEW_ACCESS_TOKEN, date,response , status_code
             PAYLOAD = encrypt_api(PAYLOAD)
             PAYLOAD = bytes.fromhex(PAYLOAD)
             
-            # Removed internal prints to keep output clean during batch run
             data = GET_LOGIN_DATA(JWT_TOKEN, PAYLOAD, region)
             
             return {"data":data ,"response" : response , "status_code" : status_code ,"name" : name, "uid" : uid, "password" : password}
         except Exception as e:
-            # Removed internal prints to keep output clean during batch run
             return {"data":None ,"response" : response , "status_code" : status_code ,"name" : name, "uid" : uid, "password" : password}
 
 def parse_results(parsed_results):
@@ -460,7 +431,6 @@ def GET_LOGIN_DATA(JWT_TOKEN, PAYLOAD, region):
     if link:
         url = f"{link}GetLoginData"
     else:
-        # Fallback to a common URL if region link is missing
         url = 'https://clientbp.ggblueshark.com/GetLoginData'
 
     headers = {
@@ -486,170 +456,11 @@ def GET_LOGIN_DATA(JWT_TOKEN, PAYLOAD, region):
             x = response.content.hex()
             json_result = get_available_room(x)
             parsed_data = json.loads(json_result)
-            # Removed internal prints to keep output clean during batch run
             return parsed_data
         
         except requests.RequestException as e:
             attempt += 1
-            # Removed time.sleep(2)
         except Exception as e:
             break
             
     return None
-
-# --- NEW/MODIFIED FUNCTIONS ---
-
-def save_account_to_file(filename, uid, password):
-    """Saves UID and Password to the specified file in JSON format."""
-    
-    new_account = {
-        "uid": uid,
-        "password": password
-    }
-    
-    accounts = []
-    try:
-        # Read existing data
-        with open(filename, 'r') as f:
-            file_content = f.read()
-            if file_content.strip():
-                accounts = json.loads(file_content)
-    except (FileNotFoundError, json.JSONDecodeError):
-        # File doesn't exist or is not valid JSON, start fresh
-        pass 
-
-    accounts.append(new_account)
-
-    try:
-        # Write back updated data
-        with open(filename, 'w') as f:
-            json.dump(accounts, f, indent=4)
-        return True
-    except Exception as e:
-        print(f"{red}{bold}ERROR saving file: {e}{Style.RESET_ALL}")
-        return False
-
-# New animation variables for smoother, faster loading
-animation_frames = ['⣾', '⣽', '⣻', '⢿', '⡿', '⣟', '⣋', '⣋'] 
-animation_index = 0
-
-def loading_animation(i, total):
-    """Continuous spinner animation without blocking time.sleep."""
-    global animation_index
-    frame = animation_frames[animation_index % len(animation_frames)]
-    animation_index += 1
-    # Updated text to reflect JOY-100K branding
-    sys.stdout.write(f"\r{purpel}[{frame}] {bold}Attempting {i}/{total} ({red}JOY-100K{purpel})...{reset}")
-    sys.stdout.flush()
-
-def print_animated_header():
-    # Updated title for the console window
-    os.system(f'title GUEST GENERATOR v100 By JOY-100K ^| @JOY-100K') 
-    # New "DEVIL"-like ASCII Art for JOY-100K
-    print(f"""{red}{bold}
-  ___ __ ____ _____ __ __ ____ 
- |  _|__| _|__| __|_  _|__|_  _|
- |  _|  |_| _|_  _|  _|__| _|  |
- |__|__|____|__|__|__|____|__|__|
- 
-{purpel}{bold}--- JOY-100K Guest Account Generator ---\n{reset}""")
-    # Removed time.sleep(0.5)
-    print(f"{purpel}{bold}--- Starting Generation Process ---{reset}")
-    # Removed time.sleep(0.5)
-
-# --- MAIN EXECUTION BLOCK (MODIFIED) ---
-
-# if __name__ == "__main__":
-    
-#     print_animated_header()
-
-#     # 1. Prompt for file name
-#     output_filename = input(f"{bold}{red}[{lg}+{red}]{red} Enter Output File Name (e.g., accounts.json): {Fore.RESET}")
-#     if not output_filename.strip():
-#         # Changed default filename from XRSUPERIOR07.json to JOY-100K.json
-#         output_filename = "JOY-100K.json"
-#     elif not output_filename.endswith('.json'):
-#         output_filename += '.json'
-        
-#     print(f"{lg}Output will be saved to: {output_filename}{Style.RESET_ALL}")
-
-#     # 2. Prompt for region
-#     region = input(f"{bold}{red}[{lg}+{red}]{red} Choose Region (ME, IND, VN, BR, ...): {Fore.RESET}").upper()
-#     if region not in REGION_URLS:
-#         print(f"{red}{bold}Warning: Region '{region}' not officially supported. Using default settings.")
-        
-#     # 3. Prompt for amount
-#     try:
-#         amount_str = input(f"{bold}{red}[{lg}+{red}]{red} Enter Amount of Accounts to Create: {Fore.RESET}")
-#         amount = int(amount_str.strip())
-#     except ValueError:
-#         print(f"{red}{bold}Invalid amount. Defaulting to 10 accounts.")
-#         amount = 10
-
-#     # Initialize the JSON file with an empty array
-#     with open(output_filename, 'w') as file:
-#         file.write("[]") 
-    
-#     print(f"\n{purpel}{bold}--- Starting Batch Generation ({amount} accounts for {region}) ---\n{Style.RESET_ALL}")
-
-#     successful_count = 0
-#     start_time = time.time() 
-#     total_time_successful = 0.0
-
-#     for i in range(1, amount + 1):
-#         attempt_start_time = time.time()
-        
-#         loading_animation(i, amount)
-#         try:
-#             r = create_acc(region)
-            
-#             # Check if the final result is valid
-#             if r and isinstance(r, dict) and r.get('data') is not None:
-#                 status_code = r.get('status_code')
-#                 uid = r.get("uid")
-#                 password = r.get("password")
-
-#                 if status_code == 200 and uid and password:
-#                     current_time = time.time()
-#                     time_taken_single = current_time - attempt_start_time
-#                     total_time_successful += time_taken_single
-
-#                     # Save only UID and Password
-#                     if save_account_to_file(output_filename, uid, password):
-#                         successful_count += 1
-#                         # Clear animation line and print success
-#                         sys.stdout.write(f"\r{green}{bold}✅ SUCCESS! [{i}/{amount}] | UID: {uid} | Pass: {password} | Time: {time_taken_single:.2f}s{reset}  \n")
-#                         sys.stdout.flush()
-#                 else:
-#                     # Clear animation line and print failure
-#                     sys.stdout.write(f'\r{red}{bold}❌ FAILED! [{i}/{amount}] Account creation failed at final step. Status: {status_code}{reset} \n')
-#                     sys.stdout.flush()
-#             else:
-#                 # Clear animation line and print failure
-#                 sys.stdout.write(f'\r{red}{bold}❌ FAILED! [{i}/{amount}] Initial API call or login failed.{reset} \n')
-#                 sys.stdout.flush()
-                
-#         except Exception as e:
-#             # Clear animation line and print error
-#             sys.stdout.write(f"\r{red}{bold}⚠️ ERROR! [{i}/{amount}] General Error.{reset} \n")
-#             sys.stdout.flush()
-
-#     # Final Summary
-#     end_time = time.time()
-#     total_duration = end_time - start_time
-#     failed_count = amount - successful_count
-    
-#     minutes = int(total_duration // 60)
-#     seconds = int(total_duration % 60)
-    
-#     avg_time_per_success = total_time_successful / successful_count if successful_count > 0 else 0.0
-    
-#     print(f"\n{lg}{bold}===================================================={reset}")
-#     print(f"{purpel}{bold}[ JOY-100K BATCH SUMMARY ]{reset}")
-#     print(f"{lg}{bold}Total Attempts: {amount}{reset}")
-#     print(f"{green}{bold}✅ Successful Accounts: {successful_count}{reset}")
-#     print(f"{red}{bold}❌ Failed Accounts: {failed_count}{reset}")
-#     print(f"{purpel}{bold}⏱️ Total Time Taken: {minutes}m {seconds}s{reset}")
-#     print(f"{lg}{bold}⚡ Avg. Time per Success: {avg_time_per_success:.2f} seconds{reset}") 
-#     print(f"{lg}{bold}Accounts saved to {output_filename}{reset}")
-#     print(f"{lg}{bold}===================================================={reset}")
