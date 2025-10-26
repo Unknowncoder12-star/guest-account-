@@ -5,14 +5,13 @@ import random
 import string
 import json
 from datetime import datetime, timedelta
-import logging # লগিং যোগ করা হলো
+import logging 
 
 # Vercel-কে রুট ফোল্ডার চেনানোর জন্য
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # আপনার মূল স্ক্রিপ্ট থেকে ফাংশন ইম্পোর্ট করা হচ্ছে
 try:
-    # নিশ্চিত করুন আপনার ফাইলটির নাম XGE_core.py বা XGE.py
     from XGE_core import create_acc, REGION_URLS
 except ImportError:
     logging.error("ImportError: XGE_core.py not found or has errors.")
@@ -22,7 +21,7 @@ except ImportError:
 
 app = Flask(__name__)
 
-# --- Static Key Management Setup ---
+# --- Static Key Management Setup (আগের মতোই) ---
 
 # Admin Key (MUST be set in Vercel Environment Variables)
 ADMIN_KEY = os.environ.get('ADMIN_KEY', 'DEFAULT-ADMIN-PASS') 
@@ -32,24 +31,21 @@ API_KEYS_JSON_STRING = os.environ.get('API_KEYS_JSON', '[]')
 STATIC_KEYS = {} 
 
 try:
-    # Load keys statically. Usage_count cannot be updated without a database.
     keys_list = json.loads(API_KEYS_JSON_STRING)
     for key_data in keys_list:
         key_str = key_data.get('key')
         if key_str:
             STATIC_KEYS[key_str] = {
-                # Limit will be checked, but usage_count will always be 0
                 'limit': key_data.get('limit', float('inf')),
                 'usage_count': 0, 
-                'expiry_date': datetime.strptime(key_data['expiry_date'], '%Y-%m-%d') if key_data.get('expiry_date') else None,
+                'expiry_date': datetime.strptime(key_data['expiry_date'], '%Y-%m-%d') if key_data.get('expiry_date') and key_data['expiry_date'] is not None else None,
                 'is_active': key_data.get('is_active', True)
             }
 except Exception as e:
     logging.error(f"Error loading API_KEYS_JSON: {e}. Check if the JSON format is valid.")
-    # If JSON is invalid, STATIC_KEYS will remain empty, blocking all API calls.
 
 
-# --- Helper Functions (Same as before) ---
+# --- Helper Functions (আগের মতোই) ---
 
 def is_admin(req):
     auth_header = req.headers.get('Authorization')
@@ -86,17 +82,17 @@ def handle_generation_request():
     if expiry_date and datetime.utcnow() > expiry_date:
         return jsonify({"error": "This key has expired."}), 403
 
-    # --- ৩. লিমিট (Limit) সিস্টেম চেক (ব্যবহার ট্র্যাক হবে না) ---
+    # --- ৩. লিমিট (Limit) সিস্টেম চেক ---
     limit = key_data.get("limit", float('inf')) 
     
     try:
         amount = int(amount_str)
         if amount < 1: amount = 1
+        # এখানে আপনি যে সংখ্যাটি সেট করবেন, তার বেশি অ্যাকাউন্ট তৈরি হবে না
         if amount > 100: amount = 100 
     except ValueError:
         amount = 1
         
-    # যেহেতু usage_count সবসময় 0, তাই limit চেক শুধু একটি সতর্কীকরণ হিসেবে কাজ করবে।
     if 0 + amount > limit: 
         return jsonify({"error": f"Key limit exceeded. Limit is {limit}. Usage is not tracked without a database."}), 403
 
@@ -108,37 +104,26 @@ def handle_generation_request():
 
     # --- ৫. অ্যাকাউন্ট জেনারেশন লুপ ---
     successful_accounts = []
-    failed_accounts = 0
     
     for i in range(amount):
         try:
             r = create_acc(region) 
             if r and r.get('data') and r.get('status_code') == 200:
+                # 🔴 শুধুমাত্র uid এবং password সেভ করা হচ্ছে
                 successful_accounts.append({
                     "uid": r.get("uid"),
-                    "password": r.get("password"),
-                    "name": r.get("name")
+                    "password": r.get("password")
                 })
-            else:
-                failed_accounts += 1
+            # ব্যর্থ অ্যাকাউন্ট ট্র্যাক করার দরকার নেই, কারণ আমরা শুধু সফল অ্যাকাউন্টই রিটার্ন করব
         except Exception as e:
-            failed_accounts += 1
+            pass # এরর এড়িয়ে যাওয়া হলো
     
-    # --- ৬. ফলাফল পাঠানো ---
-    return jsonify({
-        "status": "success",
-        "region": region,
-        "key_info": {
-            "limit": limit if limit != float('inf') else "unlimited",
-            "usage_tracked": "No (No Database)",
-            "expires_on": key_data.get("expiry_date", "never").strftime('%Y-%m-%d') if key_data.get('expiry_date') else "never"
-        },
-        "successful_count": len(successful_accounts),
-        "failed_count": failed_accounts,
-        "accounts": successful_accounts
-    }), 200
+    # --- ৬. শুধুমাত্র সফল অ্যাকাউন্টগুলো পাঠানো ---
+    # 🔴 আউটপুট এখন শুধুই একটি পরিষ্কার JSON অ্যারে
+    return jsonify(successful_accounts), 200
 
-# --- ২. অ্যাডমিন রুট (কী ম্যানেজমেন্টের জন্য - এখন শুধু ইনস্ট্রাকশন দেখাবে) ---
+
+# --- ২. অ্যাডমিন রুট (কী ম্যানেজমেন্টের জন্য - আগের মতোই থাকবে) ---
 
 def admin_instruction_response():
     """Admin routes now return instructions for manual Vercel configuration."""
@@ -152,13 +137,7 @@ def admin_instruction_response():
                 "key": "MY_CUSTOM_KEY",
                 "limit": 50,
                 "expiry_date": "2025-12-31", 
-                "is_active": true
-            },
-            {
-                "key": "ANOTHER_KEY",
-                "limit": 1000,
-                "expiry_date": null, 
-                "is_active": true
+                "is_active": True
             }
         ],
         "Current_Loaded_Keys": current_keys_json
@@ -178,6 +157,9 @@ def show_all_keys():
     if not is_admin(request):
         return jsonify({"error": "Access Denied."}), 401
     
+    if not STATIC_KEYS:
+        return jsonify({"error": "No API Keys loaded."}), 503
+        
     formatted_keys = []
     for k, v in STATIC_KEYS.items():
         formatted_keys.append({
