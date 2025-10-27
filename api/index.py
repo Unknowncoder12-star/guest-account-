@@ -90,7 +90,7 @@ def handle_generation_request():
         amount = int(amount_str)
         if amount < 1: amount = 1
         # 🟢 সর্বোচ্চ অ্যাকাউন্টের সংখ্যা এখানে 100 সেট করা হলো
-        if amount > 99999: amount = 99999 
+        if amount > 100: amount = 100
     except ValueError:
         amount = 1
         
