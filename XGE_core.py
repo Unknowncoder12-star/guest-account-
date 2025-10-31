@@ -187,7 +187,7 @@ def Major_Regsiter(access_token , open_id , field , uid , password,region):
         "Content-Type": "application/x-www-form-urlencoded",
         "Expect": "100-continue",
         "Host": "loginbp.ggblueshark.com",
-        "ReleaseVersion": "OB50",
+        "ReleaseVersion": "OB51",
         "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 9; ASUS_I005DA Build/PI)",
         "X-GA": "v1 1",
         "X-Unity-Version": "2018.4."
@@ -235,7 +235,7 @@ def chooseregion(data_bytes, jwt_token):
         'Authorization': f"Bearer {jwt_token}",
         'X-Unity-Version': "2018.4.11f1",
         'X-GA': "v1 1",
-        'ReleaseVersion': "OB50"
+        'ReleaseVersion': "OB51"
     }
     response = requests.post(url, data=payload, headers=headers,verify=False)
     return response.status_code
@@ -252,7 +252,7 @@ def login(uid , password, access_token , open_id, response , status_code , name 
         "Content-Type": "application/x-www-form-urlencoded",
         "Expect": "100-continue",
         "Host": "loginbp.ggblueshark.com",
-        "ReleaseVersion": "OB50",
+        "ReleaseVersion": "OB51",
         "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 9; ASUS_I005DA Build/PI)",
         "X-GA": "v1 1",
         "X-Unity-Version": "2018.4.11f1"
@@ -328,7 +328,7 @@ def login_server(uid , password, access_token , open_id, response , status_code 
         "Content-Type": "application/x-www-form-urlencoded",
         "Expect": "100-continue",
         "Host": "loginbp.ggblueshark.com",
-        "ReleaseVersion": "OB50",
+        "ReleaseVersion": "OB51",
         "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 9; ASUS_I005DA Build/PI)",
         "X-GA": "v1 1",
         "X-Unity-Version": "2018.4.11f1"
@@ -438,7 +438,7 @@ def GET_LOGIN_DATA(JWT_TOKEN, PAYLOAD, region):
         'Authorization': f'Bearer {JWT_TOKEN}',
         'X-Unity-Version': '2018.4.11f1',
         'X-GA': 'v1 1',
-        'ReleaseVersion': 'OB50',
+        'ReleaseVersion': 'OB51',
         'Content-Type': 'application/x-www-form-urlencoded',
         'User-Agent': 'Dalvik/2.1.0 (Linux; U; Android 10; G011A Build/PI)',
         'Host': 'clientbp.ggblueshark.com',
